@@ -15,35 +15,65 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
  
-      # --- GIT CONFIGURATION AND REMOTE SETUP ---
-      - name: Set up Git User Identity
+      - name: Set up Git
+    # Set the git user to the GitHub Actions bot for commit attribution
         run: |
-          # The bot identity for the new merge commit
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-    
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+ 
       - name: Add upstream remote and fetch
+        # Define the original repository as 'upstream' and fetch its content
         run: |
-          # Add the upstream remote reference
-          # NOTE: Replace the URL below with the actual original repository if this is wrong.
-          git remote add upstream https://github.com/Aparnaa-Marimuthu/my-app.git
-          
-          # Fetch all branches from the upstream remote
+          git remote add upstream https://github.com/Aparnaa-Marimuthu/my-app
           git fetch upstream
     
-      # --- MERGE AND PUSH ---
-      - name: Merge upstream/main into local main
+      - name: Merge upstream into your current branch (Robust Check)
+        # This step attempts to merge the correct branch from upstream (main or master).
         run: |
-          # Ensure we are on the target branch
+          # 1. Checkout the branch you want to update (always 'main' for your repo)
           git checkout main
           
-          # Perform the merge. Using '--no-edit' to prevent Git from opening an editor 
-          # which would stall the CI job. '--allow-unrelated-histories' is optional
-          # but helpful for the very first merge of a newly forked repo.
-          git merge upstream/main --allow-unrelated-histories --no-edit -m "Sync: Merge upstream changes from Aparnaa-Marimuthu/my-app"
+          # 2. Check which branch exists on the upstream remote: main or master
+          if git branch -r | grep 'upstream/main'; then
+            UPSTREAM_BRANCH="upstream/main"
+          elif git branch -r | grep 'upstream/master'; then
+            UPSTREAM_BRANCH="upstream/master"
+          else
+            echo "::error::Could not find 'main' or 'master' branch on the 'upstream' remote."
+            exit 1
+          fi
           
+          echo "Merging changes from $UPSTREAM_BRANCH into main..."
+          
+          # 3. Merge the found branch. The --allow-unrelated-histories flag 
+          #    is kept for initial syncs, but can be removed later.
+          git merge $UPSTREAM_BRANCH --allow-unrelated-histories -m "Merge upstream changes from Aparnaa-Marimuthu/my-app"
+    
       - name: Push changes to your repository
-        # Use 'origin' which is the default name for your fork's remote.
-        # This push uses the token provided by actions/checkout.
+        # Push the merged 'main' branch back to your 'origin' remote
         run: git push origin main
-     
+    
+      - name: Notify Repo Owner and Developer if Sync Fails
+        # This step runs only if any preceding step fails
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Sync Upstream Failed - ${{ github.repository }}"
+          to: |
+            repoowner@example.com,  
+            bhanu.praksh@7dxperts.com
+          from: "GitHub Actions <no-reply@github.com>"
+          body: |
+            Hi Team,
+    
+            The **Sync Upstream** GitHub Action has failed for the repository:
+              ${{ github.repository }}
+    
+            Please review the latest run logs for more details:
+              ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    
+            — GitHub Actions Bot
