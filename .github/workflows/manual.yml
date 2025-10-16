@@ -22,7 +22,7 @@ jobs:
  
       - name: Add upstream remote and fetch
         run: |
-          git remote add upstream https://github.com/thoughtspot/tse-demo-builder-v2.git
+          git remote add upstream Aparnaa-Marimuthu/my-app
           git fetch upstream
  
       - name: Merge upstream/main into your main branch
